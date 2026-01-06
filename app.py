@@ -10,6 +10,10 @@ from config import COOLDOWN_MINUTES
 
 app = Flask(__name__)
 
+# In-memory storage for latest scanned fingerprint_id (waiting for registration)
+# Structure: { "fingerprint_id": int, "timestamp": ISO8601 string }
+_latest_fingerprint_id = None
+
 
 def calculate_working_hours(check_in_time, check_out_time):
     """
@@ -144,12 +148,19 @@ def set_mode():
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     """
-    Register a new teacher (Step 1: Admin submits name and department).
+    Register a new teacher - saves all three fields together.
+    
+    Request (JSON or form-data):
+    {
+        "name": "John Doe",
+        "department": "CSE",
+        "fingerprint_id": 7
+    }
     
     In REGISTER MODE:
-    - Accepts only name and department
-    - Saves as pending registration
-    - Waits for ESP32 to send fingerprint_id via /register-fingerprint
+    - Accepts name, department, and fingerprint_id together
+    - Validates all fields are present
+    - Saves complete teacher record
     
     In ATTENDANCE MODE:
     - Returns error (registration disabled)
@@ -168,30 +179,67 @@ def register():
                 'message': f'System is in {current_mode} mode. Switch to register mode to register teachers.'
             }), 403
         
-        # Get form data (only name and department)
-        name = request.form.get('name', '').strip()
-        department = request.form.get('department', '').strip()
+        # Get data (supports both JSON and form-data)
+        if request.is_json:
+            data = request.get_json()
+            name = data.get('name', '').strip()
+            department = data.get('department', '').strip()
+            fingerprint_id = data.get('fingerprint_id')
+        else:
+            name = request.form.get('name', '').strip()
+            department = request.form.get('department', '').strip()
+            fingerprint_id_str = request.form.get('fingerprint_id', '').strip()
+            fingerprint_id = int(fingerprint_id_str) if fingerprint_id_str else None
         
-        # Validate inputs
-        if not name or not department:
+        # Validate all required fields
+        if not name or not department or fingerprint_id is None:
             return jsonify({
                 'status': 'error',
-                'message': 'Missing required fields: name, department'
+                'message': 'Missing required fields: name, department, fingerprint_id'
             }), 400
         
-        # Save as pending registration (waiting for fingerprint)
-        pending_id = database.save_pending_registration(name, department)
+        # Validate fingerprint_id type
+        try:
+            fingerprint_id = int(fingerprint_id)
+        except (ValueError, TypeError):
+            return jsonify({
+                'status': 'error',
+                'message': 'Invalid fingerprint_id format (must be integer)'
+            }), 400
         
-        if pending_id:
+        # Check if fingerprint_id already exists
+        existing_teacher = database.get_teacher_by_fingerprint_id(fingerprint_id)
+        if existing_teacher:
+            return jsonify({
+                'status': 'error',
+                'message': f'Fingerprint ID {fingerprint_id} already registered'
+            }), 400
+        
+        # Generate unique teacher_id
+        teacher_id = f"teacher_{datetime.now().strftime('%Y%m%d%H%M%S')}_{fingerprint_id}"
+        
+        # Register teacher in database (all three fields together)
+        success = database.register_teacher(
+            teacher_id=teacher_id,
+            name=name,
+            department=department,
+            fingerprint_id=fingerprint_id
+        )
+        
+        if success:
+            # Clear the latest fingerprint_id after successful registration
+            global _latest_fingerprint_id
+            _latest_fingerprint_id = None
+            
             return jsonify({
                 'status': 'success',
-                'message': f'Teacher {name} added. Please scan fingerprint on device.',
-                'pending_id': pending_id
+                'message': f'Teacher {name} registered successfully',
+                'teacher_id': teacher_id
             }), 201
         else:
             return jsonify({
                 'status': 'error',
-                'message': 'Failed to save registration'
+                'message': 'Failed to register teacher in database'
             }), 500
     
     except Exception as e:
@@ -205,20 +253,18 @@ def register():
 @app.route('/register-fingerprint', methods=['POST'])
 def register_fingerprint():
     """
-    Complete teacher registration (Step 2: ESP32 sends fingerprint_id).
+    ESP32 sends scanned fingerprint_id (REGISTER MODE only).
     
     ESP32 sends:
     {
-        "name": "John Doe",           // Optional: if provided, matches with pending
-        "department": "CSE",         // Optional: if provided, matches with pending
-        "fingerprint_id": 5          // Required: from AS608 module
+        "fingerprint_id": 7
     }
     
     Backend:
     - Validates system is in REGISTER MODE
-    - Finds matching pending registration (by name+dept or latest)
-    - Completes registration with fingerprint_id
-    - Rejects duplicate fingerprint_id
+    - Stores fingerprint_id in memory (latest_fingerprint_id)
+    - Rejects duplicate fingerprint_id (already registered)
+    - Returns success with fingerprint_id
     """
     try:
         server_time_iso = get_server_time()
@@ -243,8 +289,6 @@ def register_fingerprint():
         
         data = request.get_json()
         fingerprint_id = data.get('fingerprint_id')
-        name = data.get('name', '').strip()
-        department = data.get('department', '').strip()
         
         # Validate fingerprint_id
         if fingerprint_id is None:
@@ -263,7 +307,7 @@ def register_fingerprint():
                 'server_time': server_time_iso
             }), 400
         
-        # Check if fingerprint_id already exists
+        # Check if fingerprint_id already exists (already registered)
         existing_teacher = database.get_teacher_by_fingerprint_id(fingerprint_id)
         if existing_teacher:
             return jsonify({
@@ -272,76 +316,83 @@ def register_fingerprint():
                 'server_time': server_time_iso
             }), 400
         
-        # Find pending registration
-        pending = None
+        # Store fingerprint_id in memory (waiting for registration form submission)
+        global _latest_fingerprint_id
+        _latest_fingerprint_id = {
+            'fingerprint_id': fingerprint_id,
+            'timestamp': get_server_time()
+        }
         
-        if name and department:
-            # Try to find by name and department
-            # Get all pending and match
-            db = database.get_db()
-            pending_ref = db.collection('pending_registrations')
-            query = pending_ref.where('status', '==', 'pending')
-            docs = query.stream()
-            
-            for doc in docs:
-                data = doc.to_dict()
-                if data.get('name') == name and data.get('department') == department:
-                    pending = {
-                        'pending_id': doc.id,
-                        **data
-                    }
-                    break
-        
-        # If not found by name+dept, get latest pending
-        if not pending:
-            pending = database.get_latest_pending_registration()
-        
-        if not pending:
-            return jsonify({
-                'status': 'error',
-                'message': 'No pending registration found. Please register teacher first.',
-                'server_time': server_time_iso
-            }), 404
-        
-        # Get name and department from pending registration
-        teacher_name = pending.get('name')
-        teacher_department = pending.get('department')
-        pending_id = pending.get('pending_id')
-        
-        # Generate unique teacher_id
-        teacher_id = f"teacher_{datetime.now().strftime('%Y%m%d%H%M%S')}_{fingerprint_id}"
-        
-        # Register teacher in database
-        success = database.register_teacher(
-            teacher_id=teacher_id,
-            name=teacher_name,
-            department=teacher_department,
-            fingerprint_id=fingerprint_id
-        )
-        
-        if success:
-            # Delete pending registration
-            database.delete_pending_registration(pending_id)
-            
-            return jsonify({
-                'status': 'success',
-                'message': f'Teacher {teacher_name} registered successfully',
-                'teacher_id': teacher_id,
-                'server_time': server_time_iso
-            }), 201
-        else:
-            return jsonify({
-                'status': 'error',
-                'message': 'Failed to register teacher in database',
-                'server_time': server_time_iso
-            }), 500
+        return jsonify({
+            'status': 'success',
+            'message': 'Fingerprint ID received and stored',
+            'fingerprint_id': fingerprint_id,
+            'server_time': server_time_iso
+        }), 200
     
     except Exception as e:
         print(f"Fingerprint registration error: {e}")
         return jsonify({
             'status': 'error',
-            'message': f'Registration failed: {str(e)}',
+            'message': f'Failed to store fingerprint: {str(e)}',
             'server_time': get_server_time()
+        }), 500
+
+
+@app.route('/register-fingerprint/latest', methods=['GET'])
+def get_latest_fingerprint():
+    """
+    Frontend polls this endpoint to check if fingerprint_id is available.
+    
+    Returns:
+    {
+        "status": "waiting" | "ready",
+        "fingerprint_id": 7  // Only present when status == "ready"
+    }
+    """
+    try:
+        global _latest_fingerprint_id
+        
+        if _latest_fingerprint_id is None:
+            return jsonify({
+                'status': 'waiting',
+                'message': 'No fingerprint scanned yet'
+            }), 200
+        else:
+            return jsonify({
+                'status': 'ready',
+                'fingerprint_id': _latest_fingerprint_id['fingerprint_id'],
+                'timestamp': _latest_fingerprint_id['timestamp']
+            }), 200
+    
+    except Exception as e:
+        print(f"Error getting latest fingerprint: {e}")
+        return jsonify({
+            'status': 'error',
+            'message': f'Failed to get fingerprint status: {str(e)}'
+        }), 500
+
+
+@app.route('/register-fingerprint/clear', methods=['POST'])
+def clear_latest_fingerprint():
+    """
+    Clear the stored fingerprint_id (optional endpoint).
+    Can be called after successful registration or to reset.
+    """
+    try:
+        global _latest_fingerprint_id
+        _latest_fingerprint_id = None
+        
+        return jsonify({
+            'status': 'success',
+            'message': 'Fingerprint ID cleared'
+        }), 200
+    
+    except Exception as e:
+        print(f"Error clearing fingerprint: {e}")
+        return jsonify({
+            'status': 'error',
+            'message': f'Failed to clear fingerprint: {str(e)}'
         }), 500
 
 

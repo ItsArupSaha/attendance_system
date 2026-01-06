@@ -90,7 +90,8 @@
             color: #555;
             font-weight: 500;
         }
-        input[type="text"] {
+        input[type="text"],
+        input[type="number"] {
             width: 100%;
             padding: 12px;
             border: 2px solid #e0e0e0;
@@ -98,9 +99,18 @@
             font-size: 16px;
             transition: border-color 0.3s;
         }
-        input[type="text"]:focus {
+        input[type="text"]:focus,
+        input[type="number"]:focus {
             outline: none;
             border-color: #667eea;
+        }
+        input[readonly] {
+            background-color: #f8f9fa;
+            cursor: not-allowed;
+            border-color: #dee2e6;
+        }
+        input[readonly]:focus {
+            border-color: #dee2e6;
         }
         .field-info {
             font-size: 12px;
@@ -348,13 +358,11 @@
             <h3 style="color: #333; margin-bottom: 20px;">Register Teacher</h3>
             
             <div class="info-box" id="registerInfo">
-                This is a 2-step process:
-                <div id="step1Box" class="step-box step-active">
-                    <strong>Step 1 (On this page):</strong> Enter teacher name and department, then click <em>Register Teacher</em>.
-                </div>
-                <div id="step2Box" class="step-box step-inactive">
-                    <strong>Step 2 (On device):</strong> When asked, the teacher must place their finger on the fingerprint sensor.
-                </div>
+                <strong>Registration Process:</strong><br>
+                1. Enter teacher name and department below<br>
+                2. Teacher scans fingerprint on device<br>
+                3. Fingerprint ID will appear automatically<br>
+                4. Click "Register Teacher" to save
             </div>
             
             <form id="registrationForm">
@@ -368,32 +376,31 @@
                     <input type="text" id="department" name="department" required>
                 </div>
                 
-                <div class="field-info" style="margin-top: 10px; padding: 10px; background: #f8f9fa; border-radius: 5px;">
-                    <strong>Detailed instructions for admin:</strong><br>
-                    1. Confirm the system is in <strong>Register Mode</strong> (see top of page).<br>
-                    2. Ask the teacher to stand near the ESP32 fingerprint device.<br>
-                    3. Fill in the teacher's <strong>Name</strong> and <strong>Department</strong> and click <strong>Register Teacher</strong>.<br>
-                    4. After you see the success message, tell the teacher: <em>"Now place your finger on the sensor and keep it there until the device confirms."</em><br>
-                    5. The device will send the fingerprint ID to the backend and complete the registration automatically.
+                <div class="form-group">
+                    <label for="fingerprint_id">Fingerprint ID <span class="required">*</span></label>
+                    <input type="number" id="fingerprint_id" name="fingerprint_id" readonly style="background-color: #f0f0f0; cursor: not-allowed;">
+                    <div class="field-info" id="fingerprintStatus">
+                        <span id="waitingText">Waiting for fingerprint scan...</span>
+                    </div>
                 </div>
                 
-                <button type="submit" id="submitBtn">Register Teacher</button>
+                <div id="scanPrompt" class="highlight-scan" style="display: none;">
+                    <div class="fingerprint-container">
+                        <div class="scanning-lines"></div>
+                        <div class="fingerprint-icon"></div>
+                    </div>
+                    <div class="ready-text">
+                        <span class="status-indicator"></span>
+                        WAITING FOR FINGERPRINT SCAN
+                    </div>
+                    <div class="instruction-text">
+                        Ask the teacher to place their finger on the fingerprint sensor.<br>
+                        The fingerprint ID will appear automatically when scanned.
+                    </div>
+                </div>
+                
+                <button type="submit" id="submitBtn" disabled>Register Teacher</button>
             </form>
-
-            <div id="scanPrompt" class="highlight-scan">
-                <div class="fingerprint-container">
-                    <div class="scanning-lines"></div>
-                    <div class="fingerprint-icon"></div>
-                </div>
-                <div class="ready-text">
-                    <span class="status-indicator"></span>
-                    SENSOR IS READY - PLACE FINGER NOW
-                </div>
-                <div class="instruction-text">
-                    <strong>Step 2:</strong> Ask the teacher to place their finger on the fingerprint sensor.<br>
-                    Keep the finger steady until the device confirms registration.
-                </div>
-            </div>
         </div>
         
         <div id="message" class="message"></div>
@@ -401,6 +408,8 @@
     
     <script>
         let currentMode = 'attendance'; // Default
+        let pollingInterval = null;
+        let fingerprintIdReady = false;
         
         // Load current mode on page load
         async function loadCurrentMode() {
@@ -449,6 +458,68 @@
             }
         }
         
+        // Poll for latest fingerprint_id
+        async function pollFingerprintId() {
+            if (currentMode !== 'register') {
+                stopPolling();
+                return;
+            }
+            
+            try {
+                const response = await fetch('/register-fingerprint/latest');
+                const data = await response.json();
+                
+                if (data.status === 'ready' && data.fingerprint_id) {
+                    // Fingerprint ID is available
+                    const fingerprintIdInput = document.getElementById('fingerprint_id');
+                    const waitingText = document.getElementById('waitingText');
+                    const scanPrompt = document.getElementById('scanPrompt');
+                    const submitBtn = document.getElementById('submitBtn');
+                    
+                    fingerprintIdInput.value = data.fingerprint_id;
+                    waitingText.textContent = '✓ Fingerprint ID received: ' + data.fingerprint_id;
+                    waitingText.style.color = '#28a745';
+                    waitingText.style.fontWeight = 'bold';
+                    
+                    scanPrompt.style.display = 'none';
+                    submitBtn.disabled = false;
+                    fingerprintIdReady = true;
+                    
+                    stopPolling();
+                } else if (data.status === 'waiting') {
+                    // Still waiting for fingerprint
+                    const waitingText = document.getElementById('waitingText');
+                    const scanPrompt = document.getElementById('scanPrompt');
+                    const submitBtn = document.getElementById('submitBtn');
+                    
+                    waitingText.textContent = 'Waiting for fingerprint scan...';
+                    waitingText.style.color = '#856404';
+                    scanPrompt.style.display = 'block';
+                    submitBtn.disabled = true;
+                    fingerprintIdReady = false;
+                }
+            } catch (error) {
+                console.error('Error polling fingerprint:', error);
+            }
+        }
+        
+        // Start polling for fingerprint_id
+        function startPolling() {
+            if (pollingInterval) {
+                clearInterval(pollingInterval);
+            }
+            pollingInterval = setInterval(pollFingerprintId, 1000); // Poll every 1 second
+            pollFingerprintId(); // Immediate first check
+        }
+        
+        // Stop polling
+        function stopPolling() {
+            if (pollingInterval) {
+                clearInterval(pollingInterval);
+                pollingInterval = null;
+            }
+        }
+        
         // Update mode display
         function updateModeDisplay() {
             const modeText = document.getElementById('modeText');
@@ -457,9 +528,9 @@
             const attendanceModeBtn = document.getElementById('attendanceModeBtn');
             const submitBtn = document.getElementById('submitBtn');
             const registrationForm = document.getElementById('registrationForm');
+            const fingerprintIdInput = document.getElementById('fingerprint_id');
+            const waitingText = document.getElementById('waitingText');
             const scanPrompt = document.getElementById('scanPrompt');
-            const step1Box = document.getElementById('step1Box');
-            const step2Box = document.getElementById('step2Box');
             
             // Update mode text
             modeText.textContent = currentMode.charAt(0).toUpperCase() + currentMode.slice(1);
@@ -471,25 +542,26 @@
             if (currentMode === 'register') {
                 registerModeBtn.classList.add('active');
                 attendanceModeBtn.classList.remove('active');
-                submitBtn.disabled = false;
                 registrationForm.style.opacity = '1';
-                // In register mode, default to step 1 active
-                if (step1Box && step2Box) {
-                    step1Box.className = 'step-box step-active';
-                    step2Box.className = 'step-box step-inactive';
-                }
-                if (scanPrompt) {
-                    scanPrompt.style.display = 'none';
-                }
+                
+                // Reset fingerprint field
+                fingerprintIdInput.value = '';
+                waitingText.textContent = 'Waiting for fingerprint scan...';
+                waitingText.style.color = '#856404';
+                submitBtn.disabled = true;
+                fingerprintIdReady = false;
+                
+                // Start polling for fingerprint
+                startPolling();
             } else {
                 registerModeBtn.classList.remove('active');
                 attendanceModeBtn.classList.add('active');
                 submitBtn.disabled = true;
                 registrationForm.style.opacity = '0.5';
-                // In attendance mode, hide scan instructions
-                if (scanPrompt) {
-                    scanPrompt.style.display = 'none';
-                }
+                scanPrompt.style.display = 'none';
+                
+                // Stop polling
+                stopPolling();
             }
         }
         
@@ -505,17 +577,34 @@
                 return;
             }
             
-            const formData = new FormData(this);
+            const name = document.getElementById('name').value.trim();
+            const department = document.getElementById('department').value.trim();
+            const fingerprintId = document.getElementById('fingerprint_id').value;
+            
+            // Validate all fields
+            if (!name || !department || !fingerprintId) {
+                const messageDiv = document.getElementById('message');
+                messageDiv.textContent = 'Please fill in all fields and wait for fingerprint scan';
+                messageDiv.className = 'message error';
+                messageDiv.style.display = 'block';
+                return;
+            }
+            
             const messageDiv = document.getElementById('message');
             messageDiv.style.display = 'none';
-            const scanPrompt = document.getElementById('scanPrompt');
-            const step1Box = document.getElementById('step1Box');
-            const step2Box = document.getElementById('step2Box');
             
             try {
+                // Send all three fields together as JSON
                 const response = await fetch('/register', {
                     method: 'POST',
-                    body: formData
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        name: name,
+                        department: department,
+                        fingerprint_id: parseInt(fingerprintId)
+                    })
                 });
                 
                 const data = await response.json();
@@ -525,16 +614,21 @@
                 messageDiv.style.display = 'block';
                 
                 if (data.status === 'success') {
-                    this.reset();
-                    // Visually move to Step 2: scanning fingerprint
-                    if (step1Box && step2Box) {
-                        step1Box.className = 'step-box step-inactive';
-                        step2Box.className = 'step-box step-active';
-                    }
-                    if (scanPrompt) {
-                        scanPrompt.style.display = 'block';
-                        scanPrompt.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    }
+                    // Clear form and reset state
+                    document.getElementById('name').value = '';
+                    document.getElementById('department').value = '';
+                    document.getElementById('fingerprint_id').value = '';
+                    const waitingText = document.getElementById('waitingText');
+                    waitingText.textContent = 'Waiting for fingerprint scan...';
+                    waitingText.style.color = '#856404';
+                    submitBtn.disabled = true;
+                    fingerprintIdReady = false;
+                    
+                    // Clear the stored fingerprint_id on backend
+                    await fetch('/register-fingerprint/clear', { method: 'POST' });
+                    
+                    // Restart polling for next teacher
+                    startPolling();
                 }
             } catch (error) {
                 messageDiv.textContent = 'Registration failed: ' + error.message;
@@ -545,6 +639,11 @@
         
         // Initialize on page load
         loadCurrentMode();
+        
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', function() {
+            stopPolling();
+        });
     </script>
 </body>
 </html>
