@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Panel - Fingerprint Attendance System</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        .container {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            padding: 40px;
+            max-width: 600px;
+            width: 100%;
+        }
+        h2 {
+            color: #333;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        .mode-control {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 30px;
+            border: 2px solid #e0e0e0;
+        }
+        .mode-control h3 {
+            color: #555;
+            margin-bottom: 15px;
+            font-size: 16px;
+        }
+        .mode-buttons {
+            display: flex;
+            gap: 10px;
+        }
+        .mode-btn {
+            flex: 1;
+            padding: 12px;
+            border: 2px solid #667eea;
+            border-radius: 5px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            background: white;
+            color: #667eea;
+        }
+        .mode-btn.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-color: #667eea;
+        }
+        .mode-btn:hover:not(.active) {
+            background: #f0f0f0;
+        }
+        .current-mode {
+            margin-top: 15px;
+            padding: 10px;
+            background: #e7f3ff;
+            border-radius: 5px;
+            text-align: center;
+            font-weight: 500;
+            color: #0066cc;
+        }
+        .current-mode.register {
+            background: #fff3cd;
+            color: #856404;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #555;
+            font-weight: 500;
+        }
+        input[type="text"] {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 5px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+        input[type="text"]:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        .field-info {
+            font-size: 12px;
+            color: #666;
+            margin-top: 5px;
+        }
+        button {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        button:active {
+            transform: translateY(0);
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+        .message {
+            margin-top: 20px;
+            padding: 12px;
+            border-radius: 5px;
+            display: none;
+        }
+        .message.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .message.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .required {
+            color: red;
+        }
+        .info-box {
+            background: #e7f3ff;
+            border-left: 4px solid #0066cc;
+            padding: 12px;
+            margin-bottom: 20px;
+            border-radius: 4px;
+            font-size: 14px;
+            color: #004085;
+        }
+        .step-box {
+            margin-top: 10px;
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+        .step-active {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            color: #856404;
+        }
+        .step-inactive {
+            background: #f8f9fa;
+            border-left: 4px solid #e0e0e0;
+            color: #6c757d;
+        }
+        .highlight-scan {
+            margin-top: 15px;
+            padding: 20px;
+            border-radius: 8px;
+            background: linear-gradient(135deg, #fff3cd 0%, #ffe69c 100%);
+            border: 3px solid #ffc107;
+            color: #856404;
+            font-weight: 600;
+            display: none;
+            text-align: center;
+            box-shadow: 0 4px 15px rgba(255, 193, 7, 0.3);
+        }
+        
+        .fingerprint-container {
+            margin: 20px 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+        }
+        
+        .fingerprint-icon {
+            font-size: 100px;
+            position: relative;
+            animation: pulse 1.5s ease-in-out infinite;
+            filter: drop-shadow(0 0 15px rgba(255, 193, 7, 0.6));
+            cursor: pointer;
+        }
+        
+        .fingerprint-icon::before {
+            content: '👆';
+            display: block;
+        }
+        
+        .fingerprint-icon::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 120px;
+            height: 120px;
+            border: 3px solid #ffc107;
+            border-radius: 50%;
+            animation: ripple 2s ease-out infinite;
+            opacity: 0;
+        }
+        
+        @keyframes ripple {
+            0% {
+                transform: translate(-50%, -50%) scale(0.8);
+                opacity: 1;
+            }
+            100% {
+                transform: translate(-50%, -50%) scale(1.5);
+                opacity: 0;
+            }
+        }
+        
+        @keyframes pulse {
+            0%, 100% {
+                transform: scale(1);
+                opacity: 1;
+            }
+            50% {
+                transform: scale(1.1);
+                opacity: 0.8;
+            }
+        }
+        
+        .scanning-lines {
+            position: absolute;
+            width: 100%;
+            height: 4px;
+            background: linear-gradient(90deg, 
+                transparent 0%, 
+                #ffc107 20%, 
+                #ff9800 50%, 
+                #ffc107 80%, 
+                transparent 100%);
+            animation: scan 2s linear infinite;
+            border-radius: 2px;
+        }
+        
+        @keyframes scan {
+            0% {
+                top: 0;
+                opacity: 0;
+            }
+            10% {
+                opacity: 1;
+            }
+            90% {
+                opacity: 1;
+            }
+            100% {
+                top: 100%;
+                opacity: 0;
+            }
+        }
+        
+        .ready-text {
+            font-size: 18px;
+            margin-top: 15px;
+            font-weight: 700;
+            color: #856404;
+            animation: blink 2s ease-in-out infinite;
+        }
+        
+        @keyframes blink {
+            0%, 100% {
+                opacity: 1;
+            }
+            50% {
+                opacity: 0.6;
+            }
+        }
+        
+        .instruction-text {
+            margin-top: 10px;
+            font-size: 14px;
+            color: #856404;
+            line-height: 1.6;
+        }
+        
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #28a745;
+            margin-right: 8px;
+            animation: statusPulse 1s ease-in-out infinite;
+            box-shadow: 0 0 10px rgba(40, 167, 69, 0.6);
+        }
+        
+        @keyframes statusPulse {
+            0%, 100% {
+                transform: scale(1);
+                opacity: 1;
+            }
+            50% {
+                transform: scale(1.3);
+                opacity: 0.7;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>Admin Panel</h2>
+        
+        <!-- Mode Control Section -->
+        <div class="mode-control">
+            <h3>System Mode</h3>
+            <div class="mode-buttons">
+                <button class="mode-btn" id="registerModeBtn" onclick="setMode('register')">
+                    Register Mode
+                </button>
+                <button class="mode-btn" id="attendanceModeBtn" onclick="setMode('attendance')">
+                    Attendance Mode
+                </button>
+            </div>
+            <div class="current-mode" id="currentModeDisplay">
+                Current Mode: <span id="modeText">Loading...</span>
+            </div>
+        </div>
+        
+        <!-- Registration Form (only visible in register mode) -->
+        <div id="registrationSection">
+            <h3 style="color: #333; margin-bottom: 20px;">Register Teacher</h3>
+            
+            <div class="info-box" id="registerInfo">
+                This is a 2-step process:
+                <div id="step1Box" class="step-box step-active">
+                    <strong>Step 1 (On this page):</strong> Enter teacher name and department, then click <em>Register Teacher</em>.
+                </div>
+                <div id="step2Box" class="step-box step-inactive">
+                    <strong>Step 2 (On device):</strong> When asked, the teacher must place their finger on the fingerprint sensor.
+                </div>
+            </div>
+            
+            <form id="registrationForm">
+                <div class="form-group">
+                    <label for="name">Name <span class="required">*</span></label>
+                    <input type="text" id="name" name="name" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="department">Department <span class="required">*</span></label>
+                    <input type="text" id="department" name="department" required>
+                </div>
+                
+                <div class="field-info" style="margin-top: 10px; padding: 10px; background: #f8f9fa; border-radius: 5px;">
+                    <strong>Detailed instructions for admin:</strong><br>
+                    1. Confirm the system is in <strong>Register Mode</strong> (see top of page).<br>
+                    2. Ask the teacher to stand near the ESP32 fingerprint device.<br>
+                    3. Fill in the teacher's <strong>Name</strong> and <strong>Department</strong> and click <strong>Register Teacher</strong>.<br>
+                    4. After you see the success message, tell the teacher: <em>"Now place your finger on the sensor and keep it there until the device confirms."</em><br>
+                    5. The device will send the fingerprint ID to the backend and complete the registration automatically.
+                </div>
+                
+                <button type="submit" id="submitBtn">Register Teacher</button>
+            </form>
+
+            <div id="scanPrompt" class="highlight-scan">
+                <div class="fingerprint-container">
+                    <div class="scanning-lines"></div>
+                    <div class="fingerprint-icon"></div>
+                </div>
+                <div class="ready-text">
+                    <span class="status-indicator"></span>
+                    SENSOR IS READY - PLACE FINGER NOW
+                </div>
+                <div class="instruction-text">
+                    <strong>Step 2:</strong> Ask the teacher to place their finger on the fingerprint sensor.<br>
+                    Keep the finger steady until the device confirms registration.
+                </div>
+            </div>
+        </div>
+        
+        <div id="message" class="message"></div>
+    </div>
+    
+    <script>
+        let currentMode = 'attendance'; // Default
+        
+        // Load current mode on page load
+        async function loadCurrentMode() {
+            try {
+                const response = await fetch('/mode');
+                const data = await response.json();
+                if (data.status === 'success') {
+                    currentMode = data.mode;
+                    updateModeDisplay();
+                }
+            } catch (error) {
+                console.error('Error loading mode:', error);
+            }
+        }
+        
+        // Set system mode
+        async function setMode(mode) {
+            try {
+                const response = await fetch('/mode', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ mode: mode })
+                });
+                
+                const data = await response.json();
+                const messageDiv = document.getElementById('message');
+                
+                if (data.status === 'success') {
+                    currentMode = mode;
+                    updateModeDisplay();
+                    messageDiv.textContent = data.message;
+                    messageDiv.className = 'message success';
+                    messageDiv.style.display = 'block';
+                } else {
+                    messageDiv.textContent = data.message || 'Failed to set mode';
+                    messageDiv.className = 'message error';
+                    messageDiv.style.display = 'block';
+                }
+            } catch (error) {
+                const messageDiv = document.getElementById('message');
+                messageDiv.textContent = 'Error setting mode: ' + error.message;
+                messageDiv.className = 'message error';
+                messageDiv.style.display = 'block';
+            }
+        }
+        
+        // Update mode display
+        function updateModeDisplay() {
+            const modeText = document.getElementById('modeText');
+            const currentModeDisplay = document.getElementById('currentModeDisplay');
+            const registerModeBtn = document.getElementById('registerModeBtn');
+            const attendanceModeBtn = document.getElementById('attendanceModeBtn');
+            const submitBtn = document.getElementById('submitBtn');
+            const registrationForm = document.getElementById('registrationForm');
+            const scanPrompt = document.getElementById('scanPrompt');
+            const step1Box = document.getElementById('step1Box');
+            const step2Box = document.getElementById('step2Box');
+            
+            // Update mode text
+            modeText.textContent = currentMode.charAt(0).toUpperCase() + currentMode.slice(1);
+            
+            // Update mode display styling
+            currentModeDisplay.className = 'current-mode ' + currentMode;
+            
+            // Update button states
+            if (currentMode === 'register') {
+                registerModeBtn.classList.add('active');
+                attendanceModeBtn.classList.remove('active');
+                submitBtn.disabled = false;
+                registrationForm.style.opacity = '1';
+                // In register mode, default to step 1 active
+                if (step1Box && step2Box) {
+                    step1Box.className = 'step-box step-active';
+                    step2Box.className = 'step-box step-inactive';
+                }
+                if (scanPrompt) {
+                    scanPrompt.style.display = 'none';
+                }
+            } else {
+                registerModeBtn.classList.remove('active');
+                attendanceModeBtn.classList.add('active');
+                submitBtn.disabled = true;
+                registrationForm.style.opacity = '0.5';
+                // In attendance mode, hide scan instructions
+                if (scanPrompt) {
+                    scanPrompt.style.display = 'none';
+                }
+            }
+        }
+        
+        // Form submission
+        document.getElementById('registrationForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            if (currentMode !== 'register') {
+                const messageDiv = document.getElementById('message');
+                messageDiv.textContent = 'Please switch to Register Mode first';
+                messageDiv.className = 'message error';
+                messageDiv.style.display = 'block';
+                return;
+            }
+            
+            const formData = new FormData(this);
+            const messageDiv = document.getElementById('message');
+            messageDiv.style.display = 'none';
+            const scanPrompt = document.getElementById('scanPrompt');
+            const step1Box = document.getElementById('step1Box');
+            const step2Box = document.getElementById('step2Box');
+            
+            try {
+                const response = await fetch('/register', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                messageDiv.textContent = data.message;
+                messageDiv.className = 'message ' + (data.status === 'success' ? 'success' : 'error');
+                messageDiv.style.display = 'block';
+                
+                if (data.status === 'success') {
+                    this.reset();
+                    // Visually move to Step 2: scanning fingerprint
+                    if (step1Box && step2Box) {
+                        step1Box.className = 'step-box step-inactive';
+                        step2Box.className = 'step-box step-active';
+                    }
+                    if (scanPrompt) {
+                        scanPrompt.style.display = 'block';
+                        scanPrompt.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }
+                }
+            } catch (error) {
+                messageDiv.textContent = 'Registration failed: ' + error.message;
+                messageDiv.className = 'message error';
+                messageDiv.style.display = 'block';
+            }
+        });
+        
+        // Initialize on page load
+        loadCurrentMode();
+    </script>
+</body>
+</html>
