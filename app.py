@@ -10,6 +10,7 @@ from config import COOLDOWN_MINUTES
 from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, PatternFill
 from io import BytesIO
+import os
 
 app = Flask(__name__)
 
@@ -978,6 +979,6 @@ def health():
     }), 200
 
 
-if __name__ == '__main__':
-    from config import FLASK_HOST, FLASK_PORT, FLASK_DEBUG
-    app.run(host=FLASK_HOST, port=FLASK_PORT, debug=FLASK_DEBUG)
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 8000))
+    app.run(host="0.0.0.0", port=port, debug=False)

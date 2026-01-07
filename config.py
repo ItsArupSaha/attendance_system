@@ -22,7 +22,7 @@ FIREBASE_CLIENT_X509_CERT_URL = os.getenv("FIREBASE_CLIENT_X509_CERT_URL", "")
 COOLDOWN_MINUTES = int(os.getenv("COOLDOWN_MINUTES", "15"))
 FLASK_HOST = os.getenv("FLASK_HOST", "0.0.0.0")
 FLASK_PORT = int(os.getenv("FLASK_PORT", "8000"))
-FLASK_DEBUG = bool(int(os.getenv("FLASK_DEBUG", "1")))
+FLASK_DEBUG = bool(int(os.getenv("FLASK_DEBUG", "0")))
 
 
 def get_firebase_credentials_dict():
