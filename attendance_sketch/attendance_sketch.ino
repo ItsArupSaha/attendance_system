@@ -13,7 +13,7 @@
 /* ---------------- WiFi & Server ---------------- */
 const char* WIFI_SSID = "Arup";
 const char* WIFI_PASS = "@r()pWFp@$$1";
-const char* SERVER_BASE = "http://192.168.0.10:8000";
+const char* SERVER_BASE = "http://192.168.0.101:8000";
 
 /* ---------------- Objects ---------------- */
 HardwareSerial fp(2);
@@ -51,8 +51,8 @@ void httpPOST(const String& url, const String& payload) {
 }
 
 String extractMode(const String& json) {
-  if (json.indexOf("\"mode\":\"register\"") >= 0) return "register";
-  if (json.indexOf("\"mode\":\"attendance\"") >= 0) return "attendance";
+  if (json.indexOf("register") >= 0) return "register";
+  if (json.indexOf("attendance") >= 0) return "attendance";
   return "";
 }
 
@@ -118,8 +118,10 @@ void loop() {
     String m = extractMode(body);
     if (m.length() && m != currentMode) {
       currentMode = m;
-      if (m == "register") oled("REGISTER MODE", "Scan finger");
-      else oled("ATTENDANCE MODE", "Scan finger");
+      if (currentMode == "register")
+        oled("REGISTER MODE", "Scan finger");
+      else
+        oled("ATTENDANCE MODE", "Scan finger");
     }
   }
 
