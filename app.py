@@ -5,12 +5,16 @@ Supports mode-based operation: REGISTER MODE and ATTENDANCE MODE.
 """
 from flask import Flask, request, render_template, jsonify, make_response, send_file
 from datetime import datetime, timedelta
+import pytz
 import database
 from config import COOLDOWN_MINUTES
 from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, PatternFill
 from io import BytesIO
 import os
+
+# Bangladesh timezone (UTC+6)
+BD_TIMEZONE = pytz.timezone('Asia/Dhaka')
 
 app = Flask(__name__)
 
@@ -35,9 +39,10 @@ def calculate_working_hours(check_in_time, check_out_time):
         check_in = datetime.strptime(check_in_time, "%H:%M:%S").time()
         check_out = datetime.strptime(check_out_time, "%H:%M:%S").time()
         
-        # Create datetime objects for calculation
-        check_in_dt = datetime.combine(datetime.today(), check_in)
-        check_out_dt = datetime.combine(datetime.today(), check_out)
+        # Create datetime objects for calculation (using BD timezone)
+        today = datetime.now(BD_TIMEZONE).date()
+        check_in_dt = datetime.combine(today, check_in)
+        check_out_dt = datetime.combine(today, check_out)
         
         # Handle case where check-out is next day
         if check_out_dt < check_in_dt:
@@ -57,18 +62,18 @@ def calculate_working_hours(check_in_time, check_out_time):
 
 
 def get_server_time():
-    """Get current server time in ISO8601 format."""
-    return datetime.now().isoformat()
+    """Get current server time in ISO8601 format (Bangladesh timezone)."""
+    return datetime.now(BD_TIMEZONE).isoformat()
 
 
 def get_date_string():
-    """Get current date in YYYY-MM-DD format."""
-    return datetime.now().strftime("%Y-%m-%d")
+    """Get current date in YYYY-MM-DD format (Bangladesh timezone)."""
+    return datetime.now(BD_TIMEZONE).strftime("%Y-%m-%d")
 
 
 def get_time_string():
-    """Get current time in HH:MM:SS format."""
-    return datetime.now().strftime("%H:%M:%S")
+    """Get current time in HH:MM:SS format (Bangladesh timezone)."""
+    return datetime.now(BD_TIMEZONE).strftime("%H:%M:%S")
 
 
 @app.route('/')
@@ -220,7 +225,7 @@ def register():
             }), 400
         
         # Generate unique teacher_id
-        teacher_id = f"teacher_{datetime.now().strftime('%Y%m%d%H%M%S')}_{fingerprint_id}"
+        teacher_id = f"teacher_{datetime.now(BD_TIMEZONE).strftime('%Y%m%d%H%M%S')}_{fingerprint_id}"
         
         # Register teacher in database (all three fields together)
         success = database.register_teacher(
@@ -533,9 +538,10 @@ def attendance():
                 check_in_time = datetime.strptime(check_in, "%H:%M:%S").time()
                 current_time_obj = datetime.strptime(current_time, "%H:%M:%S").time()
                 
-                # Create datetime objects for comparison
-                check_in_dt = datetime.combine(datetime.today(), check_in_time)
-                current_dt = datetime.combine(datetime.today(), current_time_obj)
+                # Create datetime objects for comparison (using BD timezone)
+                today = datetime.now(BD_TIMEZONE).date()
+                check_in_dt = datetime.combine(today, check_in_time)
+                current_dt = datetime.combine(today, current_time_obj)
                 
                 # Handle case where current time is next day (midnight crossover)
                 if current_dt < check_in_dt:

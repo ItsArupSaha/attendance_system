@@ -4,7 +4,12 @@ Handles all database interactions using Firestore (Cloud Firestore).
 """
 import firebase_admin
 from firebase_admin import credentials, firestore
+from datetime import datetime
+import pytz
 from config import get_firebase_credentials_dict
+
+# Bangladesh timezone (UTC+6)
+BD_TIMEZONE = pytz.timezone('Asia/Dhaka')
 
 
 # Initialize Firebase Admin SDK
@@ -315,10 +320,9 @@ def set_system_mode(mode):
         
         db = get_db()
         system_ref = db.collection('system').document('mode')
-        from datetime import datetime
         system_ref.set({
             'mode': mode,
-            'updated_at': datetime.now().isoformat()
+            'updated_at': datetime.now(BD_TIMEZONE).isoformat()
         })
         return True
     except Exception as e:
@@ -345,11 +349,10 @@ def save_pending_registration(name, department):
         db = get_db()
         pending_ref = db.collection('pending_registrations')
         
-        from datetime import datetime
         pending_data = {
             'name': name,
             'department': department,
-            'created_at': datetime.now().isoformat(),
+            'created_at': datetime.now(BD_TIMEZONE).isoformat(),
             'status': 'pending'
         }
         

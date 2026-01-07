@@ -884,16 +884,6 @@
             stopPolling();
         });
 
-
-        function keepBackendAwake() {
-            fetch('/health')
-            .then(() => console.log('Backend awake'))
-            .catch(() => console.log('Backend unreachable'));
-        }
-
-        // Ping backend every 13 minutes
-        setInterval(keepBackendAwake, 600000);
-
     </script>
 </body>
 </html>
