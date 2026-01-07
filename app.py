@@ -497,6 +497,12 @@ def attendance():
                         'department': department
                     },
                     'check_in': current_time,
+                    'oled': [
+                        f"Welcome {teacher_name}",
+                        f"Dept: {department}",
+                        "Checked in",
+                        current_time
+                    ],
                     'server_time': server_time_iso
                 }), 200
             else:
@@ -548,6 +554,11 @@ def attendance():
                             'department': department,
                             'check_in': check_in
                         },
+                        'oled': [
+                            f"{teacher_name}",
+                            "Please wait",
+                            f"{remaining_minutes} min left"
+                        ],
                         'server_time': server_time_iso
                     }), 400
                 
@@ -569,6 +580,11 @@ def attendance():
                         'check_in': check_in,
                         'check_out': current_time,
                         'working_hours': working_hours,
+                        'oled': [
+                            f"Goodbye {teacher_name}",
+                            "Checked out",
+                            working_hours
+                        ],
                         'server_time': server_time_iso
                     }), 200
                 else:
@@ -601,6 +617,10 @@ def attendance():
                     'name': teacher_name,
                     'department': department
                 },
+                'oled': [
+                    "Attendance done",
+                    "Come tomorrow"
+                ],
                 'server_time': server_time_iso
             }), 400
         
