@@ -475,8 +475,39 @@
         <div id="attendanceSection" class="attendance-section" style="display: none;">
             <div class="attendance-header">
                 <h3>Attendance Records</h3>
-                <button class="btn btn-primary" type="button" onclick="loadTeachers()">View All Teachers Attendance</button>
+                <div style="display: flex; gap: 10px;">
+                    <button class="btn btn-primary" type="button" onclick="loadTeachers()">View All Teachers Attendance</button>
+                    <button class="btn btn-primary" type="button" onclick="downloadExcel()" style="background: linear-gradient(135deg, #28a745 0%, #20c997 100%);">
+                        📥 Download Excel
+                    </button>
+                </div>
             </div>
+            
+            <!-- Date Range Filter -->
+            <div class="date-range-filter" style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin: 15px 0; border: 1px solid #e0e0e0;">
+                <div style="display: flex; align-items: center; gap: 15px; flex-wrap: wrap;">
+                    <div style="flex: 1; min-width: 200px;">
+                        <label for="startDate" style="display: block; margin-bottom: 5px; color: #555; font-weight: 500; font-size: 13px;">Start Date:</label>
+                        <input type="date" id="startDate" style="width: 100%; padding: 8px; border: 2px solid #e0e0e0; border-radius: 5px; font-size: 14px;">
+                    </div>
+                    <div style="flex: 1; min-width: 200px;">
+                        <label for="endDate" style="display: block; margin-bottom: 5px; color: #555; font-weight: 500; font-size: 13px;">End Date:</label>
+                        <input type="date" id="endDate" style="width: 100%; padding: 8px; border: 2px solid #e0e0e0; border-radius: 5px; font-size: 14px;">
+                    </div>
+                    <div style="display: flex; gap: 10px; align-items: flex-end;">
+                        <button class="btn btn-primary" type="button" onclick="applyDateFilter()" style="padding: 8px 16px; font-size: 13px;">
+                            Apply Filter
+                        </button>
+                        <button class="btn" type="button" onclick="clearDateFilter()" style="padding: 8px 16px; font-size: 13px; background: #6c757d; color: white;">
+                            Clear
+                        </button>
+                    </div>
+                </div>
+                <div class="field-info" style="margin-top: 10px; font-size: 12px;">
+                    Select a date range to filter attendance records (e.g., monthly, quarterly, or semester-wise). Leave empty to show all records.
+                </div>
+            </div>
+            
             <div class="field-info">
                 This table shows all teachers' attendance as recorded by the backend. Times are shown exactly as provided by the server.
             </div>
@@ -739,12 +770,75 @@
             }
         });
 
+        // Get current date range from inputs
+        function getDateRange() {
+            const startDate = document.getElementById('startDate').value;
+            const endDate = document.getElementById('endDate').value;
+            return { startDate, endDate };
+        }
+        
+        // Apply date filter
+        function applyDateFilter() {
+            const { startDate, endDate } = getDateRange();
+            
+            // Validate date range
+            if (startDate && endDate && startDate > endDate) {
+                alert('Start date cannot be after end date!');
+                return;
+            }
+            
+            loadTeachers();
+        }
+        
+        // Clear date filter
+        function clearDateFilter() {
+            document.getElementById('startDate').value = '';
+            document.getElementById('endDate').value = '';
+            loadTeachers();
+        }
+        
+        // Download attendance as Excel
+        function downloadExcel() {
+            const { startDate, endDate } = getDateRange();
+            let url = '/attendance/download';
+            const params = [];
+            
+            if (startDate) {
+                params.push(`start_date=${encodeURIComponent(startDate)}`);
+            }
+            if (endDate) {
+                params.push(`end_date=${encodeURIComponent(endDate)}`);
+            }
+            
+            if (params.length > 0) {
+                url += '?' + params.join('&');
+            }
+            
+            window.location.href = url;
+        }
+
         // Load all teachers attendance for the table
         async function loadTeachers() {
             const tbody = document.getElementById('teachersTableBody');
             tbody.innerHTML = '<tr><td colspan="6" class="no-data">Loading...</td></tr>';
+            
+            const { startDate, endDate } = getDateRange();
+            let url = '/teachers';
+            const params = [];
+            
+            if (startDate) {
+                params.push(`start_date=${encodeURIComponent(startDate)}`);
+            }
+            if (endDate) {
+                params.push(`end_date=${encodeURIComponent(endDate)}`);
+            }
+            
+            if (params.length > 0) {
+                url += '?' + params.join('&');
+            }
+            
             try {
-                const response = await fetch('/teachers');
+                const response = await fetch(url);
                 const data = await response.json();
                 if (data.status !== 'success') {
                     tbody.innerHTML = '<tr><td colspan="6" class="no-data">Failed to load data</td></tr>';

@@ -3,10 +3,13 @@ Flask backend for Biometric Attendance System (Fingerprint-Only).
 Handles teacher registration and attendance recording via fingerprint authentication.
 Supports mode-based operation: REGISTER MODE and ATTENDANCE MODE.
 """
-from flask import Flask, request, render_template, jsonify
+from flask import Flask, request, render_template, jsonify, make_response, send_file
 from datetime import datetime, timedelta
 import database
 from config import COOLDOWN_MINUTES
+from openpyxl import Workbook
+from openpyxl.styles import Font, Alignment, PatternFill
+from io import BytesIO
 
 app = Flask(__name__)
 
@@ -652,8 +655,16 @@ def get_teachers():
     """
     Get all teachers and their attendance records.
     Used by frontend to display attendance table.
+    
+    Query parameters:
+    - start_date: Optional filter start date (YYYY-MM-DD)
+    - end_date: Optional filter end date (YYYY-MM-DD)
     """
     try:
+        # Get date range filters
+        start_date = request.args.get('start_date')
+        end_date = request.args.get('end_date')
+        
         teachers = database.get_all_teachers()
         # Flatten attendance into records for easier UI rendering
         records = []
@@ -662,17 +673,26 @@ def get_teachers():
             department = data.get('department')
             attendance = data.get('attendance', {}) or {}
             if not attendance:
-                records.append({
-                    'teacher_id': teacher_id,
-                    'name': name,
-                    'department': department,
-                    'date': None,
-                    'check_in': None,
-                    'check_out': None,
-                    'working_hours': None
-                })
+                # Only include if no date filter is applied
+                if not start_date and not end_date:
+                    records.append({
+                        'teacher_id': teacher_id,
+                        'name': name,
+                        'department': department,
+                        'date': None,
+                        'check_in': None,
+                        'check_out': None,
+                        'working_hours': None
+                    })
             else:
                 for date_str, rec in attendance.items():
+                    # Apply date range filter
+                    if start_date or end_date:
+                        if start_date and date_str < start_date:
+                            continue
+                        if end_date and date_str > end_date:
+                            continue
+                    
                     records.append({
                         'teacher_id': teacher_id,
                         'name': name,
@@ -686,6 +706,10 @@ def get_teachers():
         return jsonify({
             'status': 'success',
             'records': records,
+            'filters': {
+                'start_date': start_date,
+                'end_date': end_date
+            },
             'server_time': get_server_time()
         }), 200
     except Exception as e:
@@ -693,6 +717,254 @@ def get_teachers():
         return jsonify({
             'status': 'error',
             'message': f'Failed to get teachers: {str(e)}',
+            'server_time': get_server_time()
+        }), 500
+
+
+@app.route('/attendance/download', methods=['GET'])
+def download_attendance_excel():
+    """
+    Download attendance records as Excel file.
+    Returns an Excel file with all attendance records.
+    
+    Query parameters:
+    - start_date: Optional filter start date (YYYY-MM-DD)
+    - end_date: Optional filter end date (YYYY-MM-DD)
+    """
+    try:
+        # Get date range filters
+        start_date = request.args.get('start_date')
+        end_date = request.args.get('end_date')
+        
+        teachers = database.get_all_teachers()
+        
+        # Create a new workbook
+        wb = Workbook()
+        ws = wb.active
+        
+        # Set title based on date range
+        if start_date and end_date:
+            ws.title = f"Attendance {start_date} to {end_date}"
+        elif start_date:
+            ws.title = f"Attendance from {start_date}"
+        elif end_date:
+            ws.title = f"Attendance until {end_date}"
+        else:
+            ws.title = "Attendance Records"
+        
+        # Headers
+        headers = ['Name', 'Department', 'Date', 'Check-in', 'Check-out', 'Working Hours']
+        ws.append(headers)
+        
+        # Style header row
+        header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
+        header_font = Font(bold=True, color="FFFFFF")
+        header_alignment = Alignment(horizontal="center", vertical="center")
+        
+        for cell in ws[1]:
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = header_alignment
+        
+        # Flatten attendance into records
+        records = []
+        for teacher_id, data in teachers.items():
+            name = data.get('name', '')
+            department = data.get('department', '')
+            attendance = data.get('attendance', {}) or {}
+            
+            if not attendance:
+                # Only include if no date filter is applied
+                if not start_date and not end_date:
+                    records.append({
+                        'name': name,
+                        'department': department,
+                        'date': None,
+                        'check_in': None,
+                        'check_out': None,
+                        'working_hours': None
+                    })
+            else:
+                for date_str, rec in attendance.items():
+                    # Apply date range filter
+                    if start_date or end_date:
+                        if start_date and date_str < start_date:
+                            continue
+                        if end_date and date_str > end_date:
+                            continue
+                    
+                    records.append({
+                        'name': name,
+                        'department': department,
+                        'date': date_str,
+                        'check_in': rec.get('check_in'),
+                        'check_out': rec.get('check_out'),
+                        'working_hours': rec.get('working_hours')
+                    })
+        
+        # Sort by date descending (most recent first)
+        records.sort(key=lambda x: x['date'] or '', reverse=True)
+        
+        # Add data rows
+        for rec in records:
+            ws.append([
+                rec.get('name', ''),
+                rec.get('department', ''),
+                rec.get('date', ''),
+                rec.get('check_in', ''),
+                rec.get('check_out', ''),
+                rec.get('working_hours', '')
+            ])
+        
+        # Auto-adjust column widths
+        column_widths = [20, 15, 12, 12, 12, 20]
+        for i, width in enumerate(column_widths, start=1):
+            ws.column_dimensions[chr(64 + i)].width = width
+        
+        # Save to BytesIO
+        output = BytesIO()
+        wb.save(output)
+        output.seek(0)
+        
+        # Generate filename with date range
+        if start_date and end_date:
+            filename = f"attendance_{start_date}_to_{end_date}.xlsx"
+        elif start_date:
+            filename = f"attendance_from_{start_date}.xlsx"
+        elif end_date:
+            filename = f"attendance_until_{end_date}.xlsx"
+        else:
+            filename = f"attendance_records_{get_date_string()}.xlsx"
+        
+        return send_file(
+            output,
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            as_attachment=True,
+            download_name=filename
+        )
+    
+    except Exception as e:
+        print(f"Error generating Excel file: {e}")
+        return jsonify({
+            'status': 'error',
+            'message': f'Failed to generate Excel file: {str(e)}',
+            'server_time': get_server_time()
+        }), 500
+
+
+@app.route('/api/attendance', methods=['GET'])
+def api_attendance():
+    """
+    Public API endpoint to get all attendance records.
+    Returns JSON data that can be consumed by external applications.
+    
+    Query parameters:
+    - date: Optional filter by single date (YYYY-MM-DD) - for backward compatibility
+    - start_date: Optional filter start date (YYYY-MM-DD)
+    - end_date: Optional filter end date (YYYY-MM-DD)
+    - teacher_id: Optional filter by teacher_id
+    - format: Optional response format ('detailed' or 'summary', default: 'detailed')
+    """
+    try:
+        teachers = database.get_all_teachers()
+        
+        # Get query parameters
+        filter_date = request.args.get('date')  # Single date (backward compatibility)
+        start_date = request.args.get('start_date')
+        end_date = request.args.get('end_date')
+        filter_teacher_id = request.args.get('teacher_id')
+        response_format = request.args.get('format', 'detailed')
+        
+        # Flatten attendance into records
+        records = []
+        for teacher_id, data in teachers.items():
+            # Apply teacher_id filter if provided
+            if filter_teacher_id and teacher_id != filter_teacher_id:
+                continue
+            
+            name = data.get('name', '')
+            department = data.get('department', '')
+            fingerprint_id = data.get('fingerprint_id')
+            attendance = data.get('attendance', {}) or {}
+            
+            if not attendance:
+                # Only include if no date filter is applied
+                if not filter_date and not start_date and not end_date:
+                    records.append({
+                        'teacher_id': teacher_id,
+                        'name': name,
+                        'department': department,
+                        'fingerprint_id': fingerprint_id,
+                        'date': None,
+                        'check_in': None,
+                        'check_out': None,
+                        'working_hours': None
+                    })
+            else:
+                for date_str, rec in attendance.items():
+                    # Apply date filters
+                    if filter_date and date_str != filter_date:
+                        continue
+                    if start_date and date_str < start_date:
+                        continue
+                    if end_date and date_str > end_date:
+                        continue
+                    
+                    record = {
+                        'teacher_id': teacher_id,
+                        'name': name,
+                        'department': department,
+                        'fingerprint_id': fingerprint_id,
+                        'date': date_str,
+                        'check_in': rec.get('check_in'),
+                        'check_out': rec.get('check_out'),
+                        'working_hours': rec.get('working_hours')
+                    }
+                    records.append(record)
+        
+        # Sort by date descending (most recent first)
+        records.sort(key=lambda x: (x['date'] or '', x['name'] or ''), reverse=True)
+        
+        # Format response based on format parameter
+        if response_format == 'summary':
+            # Return summary statistics
+            total_records = len(records)
+            total_teachers = len(set(r['teacher_id'] for r in records if r['teacher_id']))
+            dates = sorted(set(r['date'] for r in records if r['date']), reverse=True)
+            
+            return jsonify({
+                'status': 'success',
+                'summary': {
+                    'total_records': total_records,
+                    'total_teachers': total_teachers,
+                    'date_range': {
+                        'earliest': dates[-1] if dates else None,
+                        'latest': dates[0] if dates else None
+                    }
+                },
+                'records': records,
+                'server_time': get_server_time()
+            }), 200
+        else:
+            # Return detailed records
+            return jsonify({
+                'status': 'success',
+                'count': len(records),
+                'records': records,
+                'filters': {
+                    'date': filter_date,
+                    'start_date': start_date,
+                    'end_date': end_date,
+                    'teacher_id': filter_teacher_id
+                },
+                'server_time': get_server_time()
+            }), 200
+    
+    except Exception as e:
+        print(f"Error getting attendance API: {e}")
+        return jsonify({
+            'status': 'error',
+            'message': f'Failed to get attendance records: {str(e)}',
             'server_time': get_server_time()
         }), 500
 
