@@ -24,7 +24,7 @@
             border-radius: 10px;
             box-shadow: 0 10px 40px rgba(0,0,0,0.2);
             padding: 40px;
-            max-width: 600px;
+            max-width: 900px;
             width: 100%;
         }
         h2 {
@@ -331,6 +331,74 @@
                 opacity: 0.7;
             }
         }
+
+        /* Attendance section styles */
+        .attendance-section {
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid #e0e0e0;
+        }
+        .attendance-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .attendance-header h3 {
+            color: #333;
+            margin-bottom: 0;
+        }
+        .btn {
+            display: inline-block;
+            padding: 8px 14px;
+            border-radius: 5px;
+            border: none;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 600;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .btn-primary:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.5);
+        }
+        .attendance-table-container {
+            margin-top: 10px;
+            max-height: 300px;
+            overflow: auto;
+            border-radius: 8px;
+            border: 1px solid #dee2e6;
+            background: #fff;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+        th, td {
+            padding: 8px 10px;
+            border-bottom: 1px solid #e9ecef;
+            text-align: left;
+            white-space: nowrap;
+        }
+        th {
+            background: #f1f3f5;
+            position: sticky;
+            top: 0;
+            z-index: 1;
+        }
+        tr:nth-child(even) td {
+            background: #fdfdfd;
+        }
+        .no-data {
+            padding: 15px;
+            text-align: center;
+            color: #888;
+        }
     </style>
 </head>
 <body>
@@ -353,7 +421,7 @@
             </div>
         </div>
         
-        <!-- Registration Form (only visible in register mode) -->
+        <!-- Registration Container (REGISTER MODE) -->
         <div id="registrationSection">
             <h3 style="color: #333; margin-bottom: 20px;">Register Teacher</h3>
             
@@ -403,6 +471,34 @@
             </form>
         </div>
         
+        <!-- Attendance Container (ATTENDANCE MODE) -->
+        <div id="attendanceSection" class="attendance-section" style="display: none;">
+            <div class="attendance-header">
+                <h3>Attendance Records</h3>
+                <button class="btn btn-primary" type="button" onclick="loadTeachers()">View All Teachers Attendance</button>
+            </div>
+            <div class="field-info">
+                This table shows all teachers' attendance as recorded by the backend. Times are shown exactly as provided by the server.
+            </div>
+            <div class="attendance-table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Department</th>
+                            <th>Date</th>
+                            <th>Check-in</th>
+                            <th>Check-out</th>
+                            <th>Working Hours</th>
+                        </tr>
+                    </thead>
+                    <tbody id="teachersTableBody">
+                        <tr><td colspan="6" class="no-data">No data loaded yet.</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
         <div id="message" class="message"></div>
     </div>
     
@@ -528,6 +624,8 @@
             const attendanceModeBtn = document.getElementById('attendanceModeBtn');
             const submitBtn = document.getElementById('submitBtn');
             const registrationForm = document.getElementById('registrationForm');
+            const registrationSection = document.getElementById('registrationSection');
+            const attendanceSection = document.getElementById('attendanceSection');
             const fingerprintIdInput = document.getElementById('fingerprint_id');
             const waitingText = document.getElementById('waitingText');
             const scanPrompt = document.getElementById('scanPrompt');
@@ -542,6 +640,8 @@
             if (currentMode === 'register') {
                 registerModeBtn.classList.add('active');
                 attendanceModeBtn.classList.remove('active');
+                registrationSection.style.display = 'block';
+                attendanceSection.style.display = 'none';
                 registrationForm.style.opacity = '1';
                 
                 // Reset fingerprint field
@@ -558,6 +658,8 @@
                 attendanceModeBtn.classList.add('active');
                 submitBtn.disabled = true;
                 registrationForm.style.opacity = '0.5';
+                registrationSection.style.display = 'none';
+                attendanceSection.style.display = 'block';
                 scanPrompt.style.display = 'none';
                 
                 // Stop polling
@@ -636,6 +738,49 @@
                 messageDiv.style.display = 'block';
             }
         });
+
+        // Load all teachers attendance for the table
+        async function loadTeachers() {
+            const tbody = document.getElementById('teachersTableBody');
+            tbody.innerHTML = '<tr><td colspan="6" class="no-data">Loading...</td></tr>';
+            try {
+                const response = await fetch('/teachers');
+                const data = await response.json();
+                if (data.status !== 'success') {
+                    tbody.innerHTML = '<tr><td colspan="6" class="no-data">Failed to load data</td></tr>';
+                    return;
+                }
+                const records = data.records || [];
+                if (records.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="6" class="no-data">No attendance records found.</td></tr>';
+                    return;
+                }
+                // Sort by date descending (most recent first) if date exists
+                records.sort((a, b) => {
+                    if (!a.date && !b.date) return 0;
+                    if (!a.date) return 1;
+                    if (!b.date) return -1;
+                    return a.date < b.date ? 1 : -1;
+                });
+                tbody.innerHTML = '';
+                for (const rec of records) {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td>${rec.name || '-'}</td>
+                        <td>${rec.department || '-'}</td>
+                        <td>${rec.date || '-'}</td>
+                        <td>${rec.check_in || '-'}</td>
+                        <td>${rec.check_out || '-'}</td>
+                        <td>${rec.working_hours || '-'}</td>
+                    `;
+                    tbody.appendChild(tr);
+                }
+            } catch (err) {
+                console.error('Error loading teachers:', err);
+                const tbody = document.getElementById('teachersTableBody');
+                tbody.innerHTML = '<tr><td colspan="6" class="no-data">Error loading data.</td></tr>';
+            }
+        }
         
         // Initialize on page load
         loadCurrentMode();

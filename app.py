@@ -466,12 +466,16 @@ def attendance():
         if not teacher:
             return jsonify({
                 'status': 'error',
+                'action': 'not_found',
                 'message': f'Fingerprint ID {fingerprint_id} not registered',
+                'teacher': None,
                 'server_time': server_time_iso
             }), 404
         
         # Teacher identified - proceed with attendance logic
         teacher_id = teacher['teacher_id']
+        teacher_name = teacher.get('name')
+        department = teacher.get('department')
         
         # Get today's attendance record
         today_attendance = database.get_today_attendance(teacher_id, current_date)
@@ -486,13 +490,24 @@ def attendance():
             if success:
                 return jsonify({
                     'status': 'success',
-                    'message': f'Check-in recorded for {teacher["name"]}',
+                    'action': 'check_in',
+                    'message': 'Checked in successfully',
+                    'teacher': {
+                        'name': teacher_name,
+                        'department': department
+                    },
+                    'check_in': current_time,
                     'server_time': server_time_iso
                 }), 200
             else:
                 return jsonify({
                     'status': 'error',
+                    'action': 'error',
                     'message': 'Failed to record check-in',
+                    'teacher': {
+                        'name': teacher_name,
+                        'department': department
+                    },
                     'server_time': server_time_iso
                 }), 500
         
@@ -525,8 +540,14 @@ def attendance():
                     remaining_minutes = COOLDOWN_MINUTES - minutes_passed
                     return jsonify({
                         'status': 'error',
-                        'message': f'Check-out too early. Wait {remaining_minutes} more minute(s)',
+                        'action': 'cooldown',
+                        'message': f'Please try again after {remaining_minutes} minute(s)',
                         'remaining_minutes': remaining_minutes,
+                        'teacher': {
+                            'name': teacher_name,
+                            'department': department,
+                            'check_in': check_in
+                        },
                         'server_time': server_time_iso
                     }), 400
                 
@@ -539,13 +560,26 @@ def attendance():
                 if success:
                     return jsonify({
                         'status': 'success',
-                        'message': f'Check-out recorded for {teacher["name"]}. Worked: {working_hours}',
+                        'action': 'check_out',
+                        'message': 'Checked out successfully',
+                        'teacher': {
+                            'name': teacher_name,
+                            'department': department
+                        },
+                        'check_in': check_in,
+                        'check_out': current_time,
+                        'working_hours': working_hours,
                         'server_time': server_time_iso
                     }), 200
                 else:
                     return jsonify({
                         'status': 'error',
+                        'action': 'error',
                         'message': 'Failed to record check-out',
+                        'teacher': {
+                            'name': teacher_name,
+                            'department': department
+                        },
                         'server_time': server_time_iso
                     }), 500
             
@@ -561,7 +595,12 @@ def attendance():
         elif check_in and check_out:
             return jsonify({
                 'status': 'error',
+                'action': 'completed',
                 'message': 'Attendance already completed for today',
+                'teacher': {
+                    'name': teacher_name,
+                    'department': department
+                },
                 'server_time': server_time_iso
             }), 400
         
@@ -569,7 +608,12 @@ def attendance():
         else:
             return jsonify({
                 'status': 'error',
+                'action': 'error',
                 'message': 'Invalid attendance state',
+                'teacher': {
+                    'name': teacher_name,
+                    'department': department
+                },
                 'server_time': server_time_iso
             }), 500
     
@@ -577,7 +621,58 @@ def attendance():
         print(f"Attendance error: {e}")
         return jsonify({
             'status': 'error',
+            'action': 'error',
             'message': f'Attendance processing failed: {str(e)}',
+            'server_time': get_server_time()
+        }), 500
+
+
+@app.route('/teachers', methods=['GET'])
+def get_teachers():
+    """
+    Get all teachers and their attendance records.
+    Used by frontend to display attendance table.
+    """
+    try:
+        teachers = database.get_all_teachers()
+        # Flatten attendance into records for easier UI rendering
+        records = []
+        for teacher_id, data in teachers.items():
+            name = data.get('name')
+            department = data.get('department')
+            attendance = data.get('attendance', {}) or {}
+            if not attendance:
+                records.append({
+                    'teacher_id': teacher_id,
+                    'name': name,
+                    'department': department,
+                    'date': None,
+                    'check_in': None,
+                    'check_out': None,
+                    'working_hours': None
+                })
+            else:
+                for date_str, rec in attendance.items():
+                    records.append({
+                        'teacher_id': teacher_id,
+                        'name': name,
+                        'department': department,
+                        'date': date_str,
+                        'check_in': rec.get('check_in'),
+                        'check_out': rec.get('check_out'),
+                        'working_hours': rec.get('working_hours')
+                    })
+
+        return jsonify({
+            'status': 'success',
+            'records': records,
+            'server_time': get_server_time()
+        }), 200
+    except Exception as e:
+        print(f"Error getting teachers: {e}")
+        return jsonify({
+            'status': 'error',
+            'message': f'Failed to get teachers: {str(e)}',
             'server_time': get_server_time()
         }), 500
 
