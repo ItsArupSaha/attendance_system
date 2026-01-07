@@ -152,9 +152,26 @@ void setup() {
   display.setTextColor(WHITE);
 
   oledShowLines("Connecting WiFi...");
+  WiFi.mode(WIFI_STA);
   WiFi.begin(WIFI_SSID, WIFI_PASS);
-  while (WiFi.status() != WL_CONNECTED) delay(300);
-  oledShowLines("WiFi Connected");
+
+  unsigned long startAttempt = millis();
+
+  while (WiFi.status() != WL_CONNECTED && millis() - startAttempt < 15000) {
+    delay(500);
+    Serial.print(".");
+  }
+
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.println("\nWiFi connected");
+    Serial.print("IP: ");
+    Serial.println(WiFi.localIP());
+    oledShowLines("WiFi Connected", WiFi.localIP().toString());
+  } else {
+    Serial.println("\nWiFi FAILED");
+    oledShowLines("WiFi Failed", "Check 2.4GHz");
+    while (1);  // stop here
+  }
 
   String resp = httpGET(String(SERVER_BASE) + "/health");
   Serial.println("HEALTH RESPONSE:");
