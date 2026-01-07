@@ -225,7 +225,7 @@ void loop() {
     );
 
     showFromBackend(resp);
-    delay(3500);
+    delay(6000);
     return;
   }
 
@@ -247,7 +247,7 @@ void loop() {
     );
 
     showFromBackend(resp);
-    delay(3500);
+    delay(6000);
     return;
   }
 }
