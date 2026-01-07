@@ -883,6 +883,17 @@
         window.addEventListener('beforeunload', function() {
             stopPolling();
         });
+
+
+        function keepBackendAwake() {
+            fetch('/health')
+            .then(() => console.log('Backend awake'))
+            .catch(() => console.log('Backend unreachable'));
+        }
+
+        // Ping backend every 13 minutes
+        setInterval(keepBackendAwake, 780000);
+
     </script>
 </body>
 </html>

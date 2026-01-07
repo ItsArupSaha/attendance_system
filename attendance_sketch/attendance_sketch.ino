@@ -13,7 +13,7 @@
 /* ---------------- WIFI & SERVER ---------------- */
 const char* WIFI_SSID = "Arup";
 const char* WIFI_PASS = "@r()pWFp@$$1";
-const char* SERVER_BASE = "http://192.168.0.101:8000";
+const char* SERVER_BASE = "https://mu-attendance.onrender.com";
 
 /* ---------------- OBJECTS ---------------- */
 HardwareSerial fp(2);
@@ -155,6 +155,10 @@ void setup() {
   WiFi.begin(WIFI_SSID, WIFI_PASS);
   while (WiFi.status() != WL_CONNECTED) delay(300);
   oledShowLines("WiFi Connected");
+
+  String resp = httpGET(String(SERVER_BASE) + "/health");
+  Serial.println("HEALTH RESPONSE:");
+  Serial.println(resp);
 
   fp.begin(57600, SERIAL_8N1, FP_RX, FP_TX);
   finger.begin(57600);
