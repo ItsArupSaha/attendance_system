@@ -399,6 +399,151 @@
             text-align: center;
             color: #888;
         }
+        
+        /* Modal styles */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            animation: fadeIn 0.3s;
+            overflow: auto;
+        }
+        
+        .modal-content {
+            background-color: white;
+            margin: auto;
+            padding: 30px;
+            border-radius: 10px;
+            width: 90%;
+            max-width: 500px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+            animation: slideDown 0.3s;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        
+        @keyframes slideDown {
+            from {
+                transform: translate(-50%, -60%);
+                opacity: 0;
+            }
+            to {
+                transform: translate(-50%, -50%);
+                opacity: 1;
+            }
+        }
+        
+        .modal-header {
+            margin-bottom: 20px;
+        }
+        
+        .modal-header h3 {
+            color: #333;
+            margin: 0;
+            font-size: 20px;
+        }
+        
+        .modal-body {
+            margin-bottom: 20px;
+        }
+        
+        .modal-footer {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 20px;
+        }
+        
+        .close {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+            line-height: 20px;
+        }
+        
+        .close:hover,
+        .close:focus {
+            color: #000;
+        }
+        
+        .form-group-modal {
+            margin-bottom: 20px;
+        }
+        
+        .form-group-modal label {
+            display: block;
+            margin-bottom: 8px;
+            color: #555;
+            font-weight: 500;
+            font-size: 14px;
+        }
+        
+        .form-group-modal input[type="date"] {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #e0e0e0;
+            border-radius: 5px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+        
+        .form-group-modal input[type="date"]:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .btn-modal {
+            padding: 10px 20px;
+            border-radius: 5px;
+            border: none;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .btn-modal-primary {
+            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+            color: white;
+        }
+        
+        .btn-modal-primary:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(40, 167, 69, 0.4);
+        }
+        
+        .btn-modal-secondary {
+            background: #6c757d;
+            color: white;
+        }
+        
+        .btn-modal-secondary:hover {
+            background: #5a6268;
+        }
+        
+        .modal-info {
+            background: #e7f3ff;
+            border-left: 4px solid #0066cc;
+            padding: 10px;
+            margin-bottom: 15px;
+            border-radius: 4px;
+            font-size: 13px;
+            color: #004085;
+        }
     </style>
 </head>
 <body>
@@ -474,42 +619,40 @@
         <!-- Attendance Container (ATTENDANCE MODE) -->
         <div id="attendanceSection" class="attendance-section" style="display: none;">
             <div class="attendance-header">
-                <h3>Attendance Records</h3>
+                <h3 id="attendanceTitle">Today's Attendance Records</h3>
                 <div style="display: flex; gap: 10px;">
-                    <button class="btn btn-primary" type="button" onclick="loadTeachers()">View All Teachers Attendance</button>
                     <button class="btn btn-primary" type="button" onclick="downloadExcel()" style="background: linear-gradient(135deg, #28a745 0%, #20c997 100%);">
-                        📥 Download Excel
+                        📥 Download Excel Report
                     </button>
                 </div>
             </div>
             
-            <!-- Date Range Filter -->
-            <div class="date-range-filter" style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin: 15px 0; border: 1px solid #e0e0e0;">
+            <!-- Date Selector -->
+            <div class="date-selector" style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin: 15px 0; border: 1px solid #e0e0e0;">
                 <div style="display: flex; align-items: center; gap: 15px; flex-wrap: wrap;">
                     <div style="flex: 1; min-width: 200px;">
-                        <label for="startDate" style="display: block; margin-bottom: 5px; color: #555; font-weight: 500; font-size: 13px;">Start Date:</label>
-                        <input type="date" id="startDate" style="width: 100%; padding: 8px; border: 2px solid #e0e0e0; border-radius: 5px; font-size: 14px;">
-                    </div>
-                    <div style="flex: 1; min-width: 200px;">
-                        <label for="endDate" style="display: block; margin-bottom: 5px; color: #555; font-weight: 500; font-size: 13px;">End Date:</label>
-                        <input type="date" id="endDate" style="width: 100%; padding: 8px; border: 2px solid #e0e0e0; border-radius: 5px; font-size: 14px;">
+                        <label for="selectedDate" style="display: block; margin-bottom: 5px; color: #555; font-weight: 500; font-size: 13px;">Select Date:</label>
+                        <input type="date" id="selectedDate" style="width: 100%; padding: 8px; border: 2px solid #e0e0e0; border-radius: 5px; font-size: 14px;" onchange="loadTeachers()">
                     </div>
                     <div style="display: flex; gap: 10px; align-items: flex-end;">
-                        <button class="btn btn-primary" type="button" onclick="applyDateFilter()" style="padding: 8px 16px; font-size: 13px;">
-                            Apply Filter
+                        <button class="btn btn-primary" type="button" onclick="setToday()" style="padding: 8px 16px; font-size: 13px;">
+                            Today
                         </button>
-                        <button class="btn" type="button" onclick="clearDateFilter()" style="padding: 8px 16px; font-size: 13px; background: #6c757d; color: white;">
-                            Clear
+                        <button class="btn" type="button" onclick="previousDay()" style="padding: 8px 16px; font-size: 13px; background: #6c757d; color: white;">
+                            ← Prev
+                        </button>
+                        <button class="btn" type="button" onclick="nextDay()" style="padding: 8px 16px; font-size: 13px; background: #6c757d; color: white;">
+                            Next →
                         </button>
                     </div>
                 </div>
                 <div class="field-info" style="margin-top: 10px; font-size: 12px;">
-                    Select a date range to filter attendance records (e.g., monthly, quarterly, or semester-wise). Leave empty to show all records.
+                    View attendance records for a specific date. Default shows today's records.
                 </div>
             </div>
             
-            <div class="field-info">
-                This table shows all teachers' attendance as recorded by the backend. Times are shown exactly as provided by the server.
+            <div class="field-info" id="dateInfo">
+                Showing attendance records for today.
             </div>
             <div class="attendance-table-container">
                 <table>
@@ -531,6 +674,36 @@
         </div>
 
         <div id="message" class="message"></div>
+    </div>
+    
+    <!-- Excel Download Modal -->
+    <div id="excelModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <span class="close" onclick="closeExcelModal()">&times;</span>
+                <h3>📥 Download Excel Report</h3>
+            </div>
+            <div class="modal-body">
+                <div class="modal-info">
+                    Select a date range to generate an Excel report with summary statistics and daily records.
+                </div>
+                <div class="form-group-modal">
+                    <label for="excelStartDate">Start Date:</label>
+                    <input type="date" id="excelStartDate">
+                </div>
+                <div class="form-group-modal">
+                    <label for="excelEndDate">End Date:</label>
+                    <input type="date" id="excelEndDate">
+                </div>
+                <div class="field-info" style="font-size: 12px; color: #666; margin-top: 10px;">
+                    Leave both fields empty to download all records. The report will include a summary sheet and individual daily sheets.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-modal btn-modal-secondary" onclick="closeExcelModal()">Cancel</button>
+                <button class="btn-modal btn-modal-primary" onclick="confirmExcelDownload()">Download</button>
+            </div>
+        </div>
     </div>
     
     <script>
@@ -770,16 +943,69 @@
             }
         });
 
-        // Get current date range from inputs
-        function getDateRange() {
-            const startDate = document.getElementById('startDate').value;
-            const endDate = document.getElementById('endDate').value;
-            return { startDate, endDate };
+        // Get today's date in YYYY-MM-DD format
+        function getTodayDate() {
+            const today = new Date();
+            const year = today.getFullYear();
+            const month = String(today.getMonth() + 1).padStart(2, '0');
+            const day = String(today.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
         }
         
-        // Apply date filter
-        function applyDateFilter() {
-            const { startDate, endDate } = getDateRange();
+        // Set date to today
+        function setToday() {
+            const today = getTodayDate();
+            document.getElementById('selectedDate').value = today;
+            loadTeachers();
+        }
+        
+        // Navigate to previous day
+        function previousDay() {
+            const dateInput = document.getElementById('selectedDate');
+            const currentDate = dateInput.value || getTodayDate();
+            const date = new Date(currentDate);
+            date.setDate(date.getDate() - 1);
+            const newDate = date.toISOString().split('T')[0];
+            dateInput.value = newDate;
+            loadTeachers();
+        }
+        
+        // Navigate to next day
+        function nextDay() {
+            const dateInput = document.getElementById('selectedDate');
+            const currentDate = dateInput.value || getTodayDate();
+            const date = new Date(currentDate);
+            date.setDate(date.getDate() + 1);
+            const newDate = date.toISOString().split('T')[0];
+            dateInput.value = newDate;
+            loadTeachers();
+        }
+        
+        // Open Excel download modal
+        function downloadExcel() {
+            const modal = document.getElementById('excelModal');
+            modal.style.display = 'block';
+            
+            // Set default dates (optional - can leave empty)
+            // You can set today's date as default end date if needed
+            // const today = getTodayDate();
+            // document.getElementById('excelEndDate').value = today;
+        }
+        
+        // Close Excel download modal
+        function closeExcelModal() {
+            const modal = document.getElementById('excelModal');
+            modal.style.display = 'none';
+            
+            // Clear the date inputs
+            document.getElementById('excelStartDate').value = '';
+            document.getElementById('excelEndDate').value = '';
+        }
+        
+        // Confirm and download Excel
+        function confirmExcelDownload() {
+            const startDate = document.getElementById('excelStartDate').value;
+            const endDate = document.getElementById('excelEndDate').value;
             
             // Validate date range
             if (startDate && endDate && startDate > endDate) {
@@ -787,55 +1013,63 @@
                 return;
             }
             
-            loadTeachers();
-        }
-        
-        // Clear date filter
-        function clearDateFilter() {
-            document.getElementById('startDate').value = '';
-            document.getElementById('endDate').value = '';
-            loadTeachers();
-        }
-        
-        // Download attendance as Excel
-        function downloadExcel() {
-            const { startDate, endDate } = getDateRange();
+            // Build URL
             let url = '/attendance/download';
             const params = [];
             
-            if (startDate) {
-                params.push(`start_date=${encodeURIComponent(startDate)}`);
+            if (startDate && startDate.trim()) {
+                params.push(`start_date=${encodeURIComponent(startDate.trim())}`);
             }
-            if (endDate) {
-                params.push(`end_date=${encodeURIComponent(endDate)}`);
+            if (endDate && endDate.trim()) {
+                params.push(`end_date=${encodeURIComponent(endDate.trim())}`);
             }
             
             if (params.length > 0) {
                 url += '?' + params.join('&');
             }
             
+            // Close modal and download
+            closeExcelModal();
             window.location.href = url;
         }
+        
+        // Close modal when clicking outside of it
+        window.onclick = function(event) {
+            const modal = document.getElementById('excelModal');
+            if (event.target === modal) {
+                closeExcelModal();
+            }
+        }
+        
+        // Close modal with Escape key
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'Escape') {
+                closeExcelModal();
+            }
+        });
 
-        // Load all teachers attendance for the table
+        // Load all teachers attendance for the table (single date view)
         async function loadTeachers() {
             const tbody = document.getElementById('teachersTableBody');
+            const dateInfo = document.getElementById('dateInfo');
+            const attendanceTitle = document.getElementById('attendanceTitle');
+            
             tbody.innerHTML = '<tr><td colspan="6" class="no-data">Loading...</td></tr>';
             
-            const { startDate, endDate } = getDateRange();
-            let url = '/teachers';
-            const params = [];
+            // Get selected date (default to today)
+            const selectedDate = document.getElementById('selectedDate').value || getTodayDate();
             
-            if (startDate) {
-                params.push(`start_date=${encodeURIComponent(startDate)}`);
-            }
-            if (endDate) {
-                params.push(`end_date=${encodeURIComponent(endDate)}`);
+            // Update title and info
+            if (selectedDate === getTodayDate()) {
+                attendanceTitle.textContent = "Today's Attendance Records";
+                dateInfo.textContent = `Showing attendance records for today (${selectedDate}).`;
+            } else {
+                attendanceTitle.textContent = `Attendance Records - ${selectedDate}`;
+                dateInfo.textContent = `Showing attendance records for ${selectedDate}.`;
             }
             
-            if (params.length > 0) {
-                url += '?' + params.join('&');
-            }
+            // Use single date filter (both start and end date set to same date)
+            let url = `/teachers?start_date=${encodeURIComponent(selectedDate)}&end_date=${encodeURIComponent(selectedDate)}`;
             
             try {
                 const response = await fetch(url);
@@ -845,19 +1079,24 @@
                     return;
                 }
                 const records = data.records || [];
-                if (records.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="6" class="no-data">No attendance records found.</td></tr>';
+                
+                // Filter to only show records for the selected date
+                const filteredRecords = records.filter(rec => rec.date === selectedDate);
+                
+                if (filteredRecords.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="6" class="no-data">No attendance records found for this date.</td></tr>';
                     return;
                 }
-                // Sort by date descending (most recent first) if date exists
-                records.sort((a, b) => {
-                    if (!a.date && !b.date) return 0;
-                    if (!a.date) return 1;
-                    if (!b.date) return -1;
-                    return a.date < b.date ? 1 : -1;
+                
+                // Sort by name alphabetically
+                filteredRecords.sort((a, b) => {
+                    const nameA = (a.name || '').toLowerCase();
+                    const nameB = (b.name || '').toLowerCase();
+                    return nameA.localeCompare(nameB);
                 });
+                
                 tbody.innerHTML = '';
-                for (const rec of records) {
+                for (const rec of filteredRecords) {
                     const tr = document.createElement('tr');
                     tr.innerHTML = `
                         <td>${rec.name || '-'}</td>
@@ -878,6 +1117,19 @@
         
         // Initialize on page load
         loadCurrentMode();
+        
+        // Set default date to today when attendance section is shown
+        const originalUpdateModeDisplay = updateModeDisplay;
+        updateModeDisplay = function() {
+            originalUpdateModeDisplay();
+            if (currentMode === 'attendance') {
+                // Set today's date as default
+                const today = getTodayDate();
+                document.getElementById('selectedDate').value = today;
+                // Load today's records
+                loadTeachers();
+            }
+        };
         
         // Cleanup on page unload
         window.addEventListener('beforeunload', function() {

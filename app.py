@@ -61,6 +61,49 @@ def calculate_working_hours(check_in_time, check_out_time):
         return "0 hours 0 minutes"
 
 
+def parse_working_hours_to_minutes(working_hours_str):
+    """
+    Parse working hours string (e.g., "8 hours 30 minutes") to total minutes.
+    
+    Args:
+        working_hours_str: Working hours string like "8 hours 30 minutes"
+    
+    Returns:
+        int: Total minutes, or 0 if parsing fails
+    """
+    try:
+        if not working_hours_str:
+            return 0
+        
+        # Extract hours and minutes from string like "8 hours 30 minutes"
+        import re
+        hours_match = re.search(r'(\d+)\s*hours?', working_hours_str)
+        minutes_match = re.search(r'(\d+)\s*minutes?', working_hours_str)
+        
+        hours = int(hours_match.group(1)) if hours_match else 0
+        minutes = int(minutes_match.group(1)) if minutes_match else 0
+        
+        return hours * 60 + minutes
+    except Exception as e:
+        print(f"Error parsing working hours: {e}")
+        return 0
+
+
+def format_minutes_to_hours(minutes):
+    """
+    Convert total minutes to human-readable format.
+    
+    Args:
+        minutes: Total minutes
+    
+    Returns:
+        str: Formatted string like "8 hours 30 minutes"
+    """
+    hours = minutes // 60
+    mins = minutes % 60
+    return f"{hours} hours {mins} minutes"
+
+
 def get_server_time():
     """Get current server time in ISO8601 format (Bangladesh timezone)."""
     return datetime.now(BD_TIMEZONE).isoformat()
@@ -731,102 +774,259 @@ def get_teachers():
 @app.route('/attendance/download', methods=['GET'])
 def download_attendance_excel():
     """
-    Download attendance records as Excel file.
-    Returns an Excel file with all attendance records.
+    Download attendance records as Excel file with multi-sheet format.
+    Sheet 1: Summary Report (overall statistics by teacher)
+    Sheet 2+: Daily sheets (one per day in date range)
     
     Query parameters:
     - start_date: Optional filter start date (YYYY-MM-DD)
     - end_date: Optional filter end date (YYYY-MM-DD)
     """
     try:
-        # Get date range filters
-        start_date = request.args.get('start_date')
-        end_date = request.args.get('end_date')
+        # Get date range filters (strip whitespace and handle empty strings)
+        start_date = request.args.get('start_date', '').strip() or None
+        end_date = request.args.get('end_date', '').strip() or None
         
         teachers = database.get_all_teachers()
         
+        # Debug: Print how many teachers we got
+        print(f"Excel Download: Found {len(teachers)} teachers")
+        
         # Create a new workbook
         wb = Workbook()
-        ws = wb.active
+        wb.remove(wb.active)  # Remove default sheet
         
-        # Set title based on date range
-        if start_date and end_date:
-            ws.title = f"Attendance {start_date} to {end_date}"
-        elif start_date:
-            ws.title = f"Attendance from {start_date}"
-        elif end_date:
-            ws.title = f"Attendance until {end_date}"
-        else:
-            ws.title = "Attendance Records"
+        # Collect all records and organize by date
+        all_records = []
+        dates_set = set()
         
-        # Headers
-        headers = ['Name', 'Department', 'Date', 'Check-in', 'Check-out', 'Working Hours']
-        ws.append(headers)
-        
-        # Style header row
-        header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
-        header_font = Font(bold=True, color="FFFFFF")
-        header_alignment = Alignment(horizontal="center", vertical="center")
-        
-        for cell in ws[1]:
-            cell.fill = header_fill
-            cell.font = header_font
-            cell.alignment = header_alignment
-        
-        # Flatten attendance into records
-        records = []
         for teacher_id, data in teachers.items():
             name = data.get('name', '')
             department = data.get('department', '')
             attendance = data.get('attendance', {}) or {}
             
-            if not attendance:
-                # Only include if no date filter is applied
-                if not start_date and not end_date:
-                    records.append({
-                        'name': name,
-                        'department': department,
-                        'date': None,
-                        'check_in': None,
-                        'check_out': None,
-                        'working_hours': None
-                    })
-            else:
-                for date_str, rec in attendance.items():
-                    # Apply date range filter
-                    if start_date or end_date:
-                        if start_date and date_str < start_date:
-                            continue
-                        if end_date and date_str > end_date:
-                            continue
-                    
-                    records.append({
+            # Debug: Print attendance data for this teacher
+            if attendance:
+                print(f"Teacher {name}: Found {len(attendance)} attendance records")
+            
+            for date_str, rec in attendance.items():
+                # Apply date range filter (only if dates are provided)
+                if start_date:
+                    if date_str < start_date:
+                        continue
+                if end_date:
+                    if date_str > end_date:
+                        continue
+                
+                check_in = rec.get('check_in')
+                check_out = rec.get('check_out')
+                working_hours = rec.get('working_hours')
+                
+                # Include records with both check-in and check-out (for summary)
+                # For daily sheets, we'll include all records
+                if check_in and check_out:
+                    all_records.append({
+                        'teacher_id': teacher_id,
                         'name': name,
                         'department': department,
                         'date': date_str,
-                        'check_in': rec.get('check_in'),
-                        'check_out': rec.get('check_out'),
-                        'working_hours': rec.get('working_hours')
+                        'check_in': check_in,
+                        'check_out': check_out,
+                        'working_hours': working_hours
                     })
+                    dates_set.add(date_str)
         
-        # Sort by date descending (most recent first)
-        records.sort(key=lambda x: x['date'] or '', reverse=True)
+        # Also collect all records (including partial) for daily sheets
+        all_records_for_daily = []
+        for teacher_id, data in teachers.items():
+            name = data.get('name', '')
+            department = data.get('department', '')
+            attendance = data.get('attendance', {}) or {}
+            
+            for date_str, rec in attendance.items():
+                # Apply date range filter
+                if start_date:
+                    if date_str < start_date:
+                        continue
+                if end_date:
+                    if date_str > end_date:
+                        continue
+                
+                check_in = rec.get('check_in')
+                check_out = rec.get('check_out')
+                working_hours = rec.get('working_hours')
+                
+                # Include all records for daily sheets (even if only check-in)
+                if check_in:  # At least check-in is required
+                    all_records_for_daily.append({
+                        'teacher_id': teacher_id,
+                        'name': name,
+                        'department': department,
+                        'date': date_str,
+                        'check_in': check_in,
+                        'check_out': check_out,
+                        'working_hours': working_hours
+                    })
+                    dates_set.add(date_str)
         
-        # Add data rows
-        for rec in records:
-            ws.append([
-                rec.get('name', ''),
-                rec.get('department', ''),
-                rec.get('date', ''),
-                rec.get('check_in', ''),
-                rec.get('check_out', ''),
-                rec.get('working_hours', '')
-            ])
+        # Debug: Print how many records we collected
+        print(f"Excel Download: Collected {len(all_records)} complete records")
+        print(f"Excel Download: Collected {len(all_records_for_daily)} total records for daily sheets")
+        print(f"Excel Download: Found {len(dates_set)} unique dates")
+        print(f"Excel Download: Date range filter: {start_date} to {end_date}")
         
-        # Auto-adjust column widths
-        column_widths = [20, 15, 12, 12, 12, 20]
-        for i, width in enumerate(column_widths, start=1):
-            ws.column_dimensions[chr(64 + i)].width = width
+        # Sort dates
+        sorted_dates = sorted(dates_set) if dates_set else []
+        
+        # Define header styling (used for both summary and daily sheets)
+        header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
+        header_font = Font(bold=True, color="FFFFFF")
+        header_alignment = Alignment(horizontal="center", vertical="center")
+        
+        # ============================================
+        # SHEET 1: SUMMARY REPORT
+        # ============================================
+        summary_ws = wb.create_sheet("Summary Report", 0)
+        
+        # If no records at all, add a message
+        if not all_records_for_daily:
+            summary_ws.append(['No attendance records found for the selected date range.'])
+            summary_ws.column_dimensions['A'].width = 50
+        else:
+            # Summary headers (removed date columns as requested)
+            summary_headers = [
+                'Teacher Name', 'Department', 'Total Days Worked', 
+                'Total Working Hours', 'Average Hours per Day'
+            ]
+            summary_ws.append(summary_headers)
+            
+            # Style summary header
+            for cell in summary_ws[1]:
+                cell.fill = header_fill
+                cell.font = header_font
+                cell.alignment = header_alignment
+            
+            # Calculate summary statistics for each teacher
+            # Use all_records (complete records only) for accurate statistics
+            teacher_summary = {}
+            
+            # Process complete records only (from all_records, not all_records_for_daily)
+            for rec in all_records:
+                teacher_id = rec['teacher_id']
+                check_in = rec.get('check_in', '').strip() if rec.get('check_in') else ''
+                check_out = rec.get('check_out', '').strip() if rec.get('check_out') else ''
+                working_hours = rec.get('working_hours', '').strip() if rec.get('working_hours') else ''
+                
+                # Only process records with both check-in and check-out
+                if check_in and check_out:
+                    if teacher_id not in teacher_summary:
+                        teacher_summary[teacher_id] = {
+                            'name': rec['name'],
+                            'department': rec['department'],
+                            'days': 0,
+                            'total_minutes': 0
+                        }
+                    
+                    summary = teacher_summary[teacher_id]
+                    summary['days'] += 1
+                    
+                    # Parse working hours and add to total
+                    minutes = parse_working_hours_to_minutes(working_hours)
+                    summary['total_minutes'] += minutes
+                    
+                    # Debug output
+                    print(f"Summary: {rec['name']} - Date: {rec['date']}, Working Hours: {working_hours}, Minutes: {minutes}")
+            
+            # Also include teachers with partial records (only check-in, no check-out)
+            # They will show 0 days and 0 hours
+            for rec in all_records_for_daily:
+                teacher_id = rec['teacher_id']
+                check_in = rec.get('check_in', '').strip() if rec.get('check_in') else ''
+                check_out = rec.get('check_out', '').strip() if rec.get('check_out') else ''
+                
+                # If teacher has only check-in (no check-out), add them with 0 stats
+                if check_in and not check_out:
+                    if teacher_id not in teacher_summary:
+                        teacher_summary[teacher_id] = {
+                            'name': rec['name'],
+                            'department': rec['department'],
+                            'days': 0,
+                            'total_minutes': 0
+                        }
+            
+            # Add summary rows
+            for teacher_id, summary in teacher_summary.items():
+                # Calculate totals
+                total_hours_str = format_minutes_to_hours(summary['total_minutes']) if summary['days'] > 0 else '0 hours 0 minutes'
+                avg_minutes = summary['total_minutes'] // summary['days'] if summary['days'] > 0 else 0
+                avg_hours_str = format_minutes_to_hours(avg_minutes) if summary['days'] > 0 else '0 hours 0 minutes'
+                
+                summary_ws.append([
+                    summary['name'],
+                    summary['department'],
+                    summary['days'],
+                    total_hours_str,
+                    avg_hours_str
+                ])
+            
+            # Sort summary by name
+            if summary_ws.max_row > 1:
+                # Get all data rows (skip header)
+                data_rows = []
+                for row in summary_ws.iter_rows(min_row=2, values_only=True):
+                    data_rows.append(row)
+                
+                # Sort by name (first column)
+                data_rows.sort(key=lambda x: x[0] or '')
+                
+                # Clear and re-add sorted rows
+                summary_ws.delete_rows(2, summary_ws.max_row)
+                for row in data_rows:
+                    summary_ws.append(row)
+            
+            # Set column widths for summary (5 columns now)
+            summary_widths = [25, 18, 18, 20, 20]
+            for i, width in enumerate(summary_widths, start=1):
+                summary_ws.column_dimensions[chr(64 + i)].width = width
+        
+        # ============================================
+        # SHEET 2+: DAILY SHEETS
+        # ============================================
+        for date_str in sorted_dates:
+            # Create sheet for this date (Excel sheet names have 31 char limit)
+            sheet_name = date_str[:31] if len(date_str) <= 31 else date_str[:28] + "..."
+            daily_ws = wb.create_sheet(sheet_name)
+            
+            # Daily headers
+            daily_headers = ['Name', 'Department', 'Check-in', 'Check-out', 'Working Hours']
+            daily_ws.append(daily_headers)
+            
+            # Style daily header
+            for cell in daily_ws[1]:
+                cell.fill = header_fill
+                cell.font = header_font
+                cell.alignment = header_alignment
+            
+            # Get records for this date (use all_records_for_daily to include partial records)
+            date_records = [r for r in all_records_for_daily if r['date'] == date_str]
+            
+            # Sort by name
+            date_records.sort(key=lambda x: x['name'] or '')
+            
+            # Add rows for this date
+            for rec in date_records:
+                daily_ws.append([
+                    rec['name'],
+                    rec['department'],
+                    rec['check_in'] or '-',
+                    rec['check_out'] or '-',
+                    rec['working_hours'] or '-'
+                ])
+            
+            # Set column widths for daily sheet
+            daily_widths = [25, 18, 15, 15, 20]
+            for i, width in enumerate(daily_widths, start=1):
+                daily_ws.column_dimensions[chr(64 + i)].width = width
         
         # Save to BytesIO
         output = BytesIO()
@@ -852,6 +1052,8 @@ def download_attendance_excel():
     
     except Exception as e:
         print(f"Error generating Excel file: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({
             'status': 'error',
             'message': f'Failed to generate Excel file: {str(e)}',
